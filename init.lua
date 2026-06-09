@@ -12,16 +12,22 @@
 
 local home    = os.getenv("HOME")
 local hsDir   = home .. "/.hammerspoon"
-local whitePath        = hsDir .. "/white.png"
-local customFillPath   = hsDir .. "/mlfill_custom.png"
-local snapPath         = hsDir .. "/wallpaper_snapshot.lua"
-local setPath          = hsDir .. "/meeting_light_settings.lua"
+local snapPath = hsDir .. "/wallpaper_snapshot.lua"
+local setPath  = hsDir .. "/meeting_light_settings.lua"
+
+-- ===== User config (safe to tweak) =====
+local CONFIG = {
+  defaultKelvin     = 4500,   -- starting warmth in Kelvin (warm 2700 .. cool 6500)
+  defaultBrightness = 100,    -- starting brightness percent
+  warmthMin     = 2700, warmthMax     = 6500,
+  brightnessMin = 10,   brightnessMax = 100,
+}
 
 -- Forward declarations (functions reference each other / the menu / the panel).
 local rebuildMenu, update, fullReconcile, openPanel
 
 local snapshot = nil  -- { [desktopIndex] = "/path" }
-local settings = { enabled = true, kelvin = 4500, brightness = 100, whiteDisplays = {} }
+local settings = { enabled = true, kelvin = CONFIG.defaultKelvin, brightness = CONFIG.defaultBrightness, whiteDisplays = {} }
 local menubar  = nil
 local panel    = nil
 local panelBackup = nil
@@ -102,7 +108,7 @@ local function loadSettings()
     if type(data.brightness) == "number" then settings.brightness = data.brightness end
     if not data.kelvin and type(data.warmth) == "string" then           -- migrate old presets
       local map = { cool=6500, daylight=5500, neutral=4500, warm=3500, warmer=2900 }
-      settings.kelvin = map[data.warmth] or 4500
+      settings.kelvin = map[data.warmth] or CONFIG.defaultKelvin
     end
     if type(data.whiteDisplays) == "table" then settings.whiteDisplays = data.whiteDisplays end
   end
@@ -247,9 +253,9 @@ local function panelHTML()
  <div class="hint">Preview shows live on your selected screen.</div>
  <div id="sw"></div>
  <div class="row"><label>Warmth <b id="kv"></b></label>
-   <input id="k" type="range" min="2700" max="6500" step="50"></div>
+   <input id="k" type="range" min="__KMIN__" max="__KMAX__" step="50"></div>
  <div class="row"><label>Brightness <b id="bv"></b></label>
-   <input id="b" type="range" min="10" max="100" step="1"></div>
+   <input id="b" type="range" min="__BMIN__" max="__BMAX__" step="1"></div>
  <div class="btns">
    <button class="cancel" onclick="send('cancel')">Cancel</button>
    <button class="done" onclick="send('done')">Done</button>
@@ -272,8 +278,10 @@ local function panelHTML()
  k.oninput=()=>{paint();schedule();};b.oninput=()=>{paint();schedule();};
  paint();
 </script></body></html>]]
-  html = html:gsub("__KELVIN__", tostring(math.floor(settings.kelvin or 4500)))
-  html = html:gsub("__BRIGHT__", tostring(math.floor(settings.brightness or 100)))
+  html = html:gsub("__KELVIN__", tostring(math.floor(settings.kelvin or CONFIG.defaultKelvin)))
+  html = html:gsub("__BRIGHT__", tostring(math.floor(settings.brightness or CONFIG.defaultBrightness)))
+  html = html:gsub("__KMIN__", tostring(CONFIG.warmthMin)):gsub("__KMAX__", tostring(CONFIG.warmthMax))
+  html = html:gsub("__BMIN__", tostring(CONFIG.brightnessMin)):gsub("__BMAX__", tostring(CONFIG.brightnessMax))
   return html
 end
 
@@ -323,11 +331,49 @@ function openPanel()
   panel:show():bringToFront(true)
 end
 
+-- ---------- menu bar icon (template images: monochrome, adapts to light/dark) ----------
+local ICON_ON, ICON_IDLE, ICON_OFF
+
+local function bulbImage(filled, slash)
+  local s = 22
+  local k = { red = 0, green = 0, blue = 0, alpha = 1 }  -- color is ignored once template = true
+  local c = hs.canvas.new({ x = 0, y = 0, w = s, h = s })
+  -- glass
+  c[#c + 1] = { type = "circle", center = { x = s * 0.5, y = s * 0.43 }, radius = s * 0.24,
+                action = filled and "fill" or "stroke", fillColor = k, strokeColor = k, strokeWidth = 1.7 }
+  -- base
+  c[#c + 1] = { type = "rectangle", frame = { x = s * 0.42, y = s * 0.63, w = s * 0.16, h = s * 0.16 },
+                roundedRectRadii = { xRadius = 1.5, yRadius = 1.5 },
+                action = filled and "fill" or "stroke", fillColor = k, strokeColor = k, strokeWidth = 1.7 }
+  if slash then
+    c[#c + 1] = { type = "segments", coordinates = { { x = s * 0.15, y = s * 0.15 }, { x = s * 0.85, y = s * 0.85 } },
+                  action = "stroke", strokeColor = k, strokeWidth = 2 }
+  end
+  local img = c:imageFromCanvas()
+  c:delete()
+  if img then img:template(true) end
+  return img
+end
+
+local function buildIcons()
+  local ok = pcall(function()
+    ICON_ON   = bulbImage(true,  false)   -- camera live: filled bulb
+    ICON_IDLE = bulbImage(false, false)   -- enabled, waiting: outline bulb
+    ICON_OFF  = bulbImage(false, true)    -- paused: outline + slash
+  end)
+  if not ok then ICON_ON, ICON_IDLE, ICON_OFF = nil, nil, nil end
+end
+
 -- ---------- menu bar ----------
 function rebuildMenu()
   if not menubar then return end
   local active = settings.enabled and cameraInUse()
-  menubar:setTitle(not settings.enabled and "🌙" or (active and "⚪" or "💡"))
+  local icon = (not settings.enabled) and ICON_OFF or (active and ICON_ON or ICON_IDLE)
+  if icon then
+    menubar:setIcon(icon); menubar:setTitle("")
+  else  -- fallback if template images couldn't be built
+    menubar:setTitle(not settings.enabled and "🌙" or (active and "⚪" or "💡"))
+  end
 
   local items = {}
   items[#items+1] = { title = settings.enabled and "✓ Auto-white during meetings" or "Auto-white during meetings",
@@ -393,6 +439,7 @@ if not fileExists(setPath) then
 end
 
 menubar = hs.menubar.new()
+buildIcons()
 require("hs.ipc")
 
 MeetingLight = {

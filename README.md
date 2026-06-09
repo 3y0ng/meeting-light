@@ -1,5 +1,9 @@
 # Meeting Light 💡
 
+![macOS](https://img.shields.io/badge/macOS-11%2B-black?logo=apple)
+![Built with Hammerspoon](https://img.shields.io/badge/built%20with-Hammerspoon-blue)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+
 Turns your second monitor into a soft fill light whenever you're on a video call, then puts your wallpaper back when the call ends. It works with Zoom, Teams, and Google Meet (including the browser versions), because it watches your camera instead of any one app.
 
 ![The slider panel for warmth and brightness](assets/panel.png)
@@ -53,11 +57,11 @@ Click the 💡 in the menu bar:
 - **Adjust light** opens the slider panel for warmth and brightness
 - **Save current wallpaper as default** and **Restore wallpaper now** are there for the rare times you need them
 
-The icon tells you the state at a glance:
+The menu bar icon is a monochrome bulb that follows the system look (white in a dark menu bar, dark in a light one). It shows the state at a glance:
 
-- 💡 on and waiting
-- ⚪ camera is live, screen is lit
-- 🌙 paused
+- outline bulb: on and waiting
+- filled bulb: camera is live and the screen is lit
+- slashed bulb: paused
 
 ### The slider panel
 
@@ -69,6 +73,21 @@ Drag Warmth and Brightness and the selected screen updates live and smoothly. Co
 - Anything that uses the camera will trigger it (Photo Booth and friends), which is usually exactly what you want.
 - Warm settings are dimmer by nature, since warm means less blue and green light. For the most light, go cool at 100%.
 - The brightness slider controls the on-screen color, not your monitor's backlight. On an external monitor the backlight is set with the monitor's own buttons, so turn that up too if you want more punch.
+
+## Tweaking it
+
+If you want different defaults or slider ranges, there's a small config block at the top of `init.lua`:
+
+```lua
+local CONFIG = {
+  defaultKelvin     = 4500,   -- starting warmth in Kelvin (warm 2700 .. cool 6500)
+  defaultBrightness = 100,    -- starting brightness percent
+  warmthMin     = 2700, warmthMax     = 6500,
+  brightnessMin = 10,   brightnessMax = 100,
+}
+```
+
+Change a value, save, and Hammerspoon reloads on its own.
 
 ## How it works (the short version)
 
