@@ -44,6 +44,8 @@ You'll know it worked when a 💡 shows up in your menu bar.
 
 ## Using it
 
+![The menu bar dropdown](assets/menu.png)
+
 Click the 💡 in the menu bar:
 
 - **Auto-white during meetings** flips the whole thing on or off
